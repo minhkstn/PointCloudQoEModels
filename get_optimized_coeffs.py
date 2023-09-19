@@ -5,6 +5,7 @@ import json
 import sys
 import pandas as pd
 import numpy as np
+import time
 
 
 from itu_p1203 import P1203Standalone
@@ -35,8 +36,8 @@ def boxplot_outlier_filter(frame):
     :param frame: data frame
     :return: filtered frame
     """
-    q1 = frame.quantile(0.25)["qoe_scaled"]
-    q3 = frame.quantile(0.75)["qoe_scaled"]
+    q1 = frame["qoe_scaled"].quantile(0.25)
+    q3 = frame["qoe_scaled"].quantile(0.75)
     # interquantile range
     iqr = q3 - q1
     fence_low = q1 - (1.5*iqr)
@@ -66,8 +67,8 @@ bitratesMbps = {
     'soldier': {'r1': 4.38, 'r3': 11.58, 'r5': 35.29}
 }
 resolution_map = {
-    'r1': '852x480',
-    'r3': '1280x720',
+    'r1': '1920x1080',
+    'r3': '1920x1080',
     'r5': '1920x1080'
 }
 
@@ -161,13 +162,21 @@ def calculate_rmse(p1203_results, mos):
 
 coeffs_array = []
 
-for a1 in np.arange(5, 15+1, 5):
+#    for a1 in np.arange(1, 20, 2):
+#         for a2 in np.arange(-2, 0, 0.1):
+#             for a3 in np.arange(120, 150, 5):
+#                 for a4 in np.arange(3, 6, 0.2):
+#                     for q1 in np.arange(1, 5, 0.2):
+#                         for q2 in np.arange(-2, 2, 0.2):
+#                             for q3 in np.arange(0.5, 5, 0.2): 
+
+for a1 in np.arange(5, 20+2, 2):
     for a2 in np.arange(-2, 0+0.5, 0.5):
-        for a3 in np.arange(50, 150, 10):
-            for a4 in np.arange(3, 6, 0.5):
-                for q1 in np.arange(4, 5, 0.2):
-                    for q2 in np.arange(-2, 2, 0.5):
-                        for q3 in np.arange(1.5, 5, 0.5):
+        for a3 in np.arange(50, 150+10, 10):
+            for a4 in np.arange(3, 6+0.5, 0.5):
+                for q1 in np.arange(4, 5+0.2, 0.2):
+                    for q2 in np.arange(-2, 2+0.5, 0.5):
+                        for q3 in np.arange(1.5, 5+0.2, 0.2):
                             coeff = {
                                 "u1": 72.61,
                                 "u2": 0.32,
@@ -206,8 +215,6 @@ for a1 in np.arange(5, 15+1, 5):
 
                             coeffs_array.append(coeff)
 
-print("Example 1", coeffs_array[0])
-print("Example 2", coeffs_array[1])
 
 def get_rmse_by_coeffs(coeff):
     qoe_p1203_dict = calculate_p1203(coeff)
@@ -216,22 +223,28 @@ def get_rmse_by_coeffs(coeff):
     p1203_df = p1203_df.loc[p1203_df['video'].isin(['longdress', 'loot'])]
     grouped_p1203_qoe = p1203_df.groupby(['video', 'start_quality', 'end_quality']).mean()
 
-    return coeff, grouped_p1203_qoe, calculate_rmse(grouped_p1203_qoe, ground_truth_qoe_grouped_df)
+    return coeff, calculate_rmse(grouped_p1203_qoe, ground_truth_qoe_grouped_df)
 
 
 if __name__ == '__main__':
     all_rmse = None
+    current_time = int(time.time())
     with Pool(10) as pool:
         all_rmse = pool.map(get_rmse_by_coeffs, coeffs_array)
 
-    all_rmse.sort(key= lambda x: x[2])
+    all_rmse.sort(key= lambda x: x[1])
+
+    # write all_rmse to files
+    with open('all_rmse_{}.txt'.format(current_time), 'w') as fp:
+        for item in all_rmse:
+            fp.write('%s\n' % str(item))
+
     print("====== BEST RESULT =======")
     print(all_rmse[0])
 
     # save the best result
-    with open('./optimized_p1203_coeff_mode0.csv', 'w') as f:
+    with open('./optimized_p1203_coeff_mode0_{}.csv'.format(current_time), 'w') as f:
         f.write('====== Coeffs ====\n' + str(all_rmse[0][0]))
-        f.write('\n====== QoE ====\n' + str(all_rmse[0][1]))
-        f.write('\n====== RMSE ====\n' + str(all_rmse[0][2]))
+        f.write('\n====== RMSE ====\n' + str(all_rmse[0][1]))
 
     print("====== DONE =======")
