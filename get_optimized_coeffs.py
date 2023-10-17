@@ -6,7 +6,7 @@ import sys
 import pandas as pd
 import numpy as np
 import time
-
+import os
 
 from itu_p1203 import P1203Standalone
 from itu_p1203 import P1203Pv
@@ -67,12 +67,12 @@ bitratesMbps = {
     'soldier': {'r1': 4.38, 'r3': 11.58, 'r5': 35.29}
 }
 resolution_map = {
-    'r1': '1920x1080',
-    'r3': '1920x1080',
+    'r1': '854x480',
+    'r3': '1280x720',
     'r5': '1920x1080'
 }
 
-
+min_rmse = sys.float_info.max
 
 def calculate_p1203(coeffs):
 
@@ -160,7 +160,7 @@ def calculate_rmse(p1203_results, mos):
 #         "htv_4": 0.03409,
 #     }
 
-coeffs_array = []
+
 
 #    for a1 in np.arange(1, 20, 2):
 #         for a2 in np.arange(-2, 0, 0.1):
@@ -168,74 +168,90 @@ coeffs_array = []
 #                 for a4 in np.arange(3, 6, 0.2):
 #                     for q1 in np.arange(1, 5, 0.2):
 #                         for q2 in np.arange(-2, 2, 0.2):
-#                             for q3 in np.arange(0.5, 5, 0.2): 
+#                             for q3 in np.arange(0.5, 5, 0.2):
 
-for a1 in np.arange(5, 20+2, 2):
-    for a2 in np.arange(-2, 0+0.5, 0.5):
-        for a3 in np.arange(50, 150+10, 10):
-            for a4 in np.arange(3, 6+0.5, 0.5):
-                for q1 in np.arange(4, 5+0.2, 0.2):
-                    for q2 in np.arange(-2, 2+0.5, 0.5):
-                        for q3 in np.arange(1.5, 5+0.2, 0.2):
-                            coeff = {
-                                "u1": 72.61,
-                                "u2": 0.32,
-                                "t1": 30.98,
-                                "t2": 1.29,
-                                "t3": 64.65,
-                                "q1": q1,
-                                "q2": q2,
-                                "q3": q3,
-                                "mode0": {
-                                    "a1": a1,
-                                    "a2": a2,
-                                    "a3": a3,
-                                    "a4": a4,
-                                },
-                                "mode1": {
-                                    "a1": 5.00011566,
-                                    "a2": -1.19630824,
-                                    "a3": 41.3585049,
-                                    "a4": 0,
-                                    "c0": -0.91562479,
-                                    "c1": 0,
-                                    "c2": -3.28579526,
-                                    "c3": 20.4098663,
-                                },
-                                "htv_1": -0.60293,
-                                "htv_2": 2.12382,
-                                "htv_3": -0.36936,
-                                "htv_4": 0.03409,
-                            }
-                            
-                            coeff['mode0']['a1'] = a1
-                            coeff['mode0']['a2'] = a2
-                            coeff['mode0']['a3'] = a3
-                            coeff['mode0']['a4'] = a4
+def get_coeffs(q1_start):
+    coeffs_array = []
+    for a1 in np.arange(7, 17, 2):
+        for a2 in np.arange(-2.1, 2, 0.2):
+            for a3 in np.arange(100, 150, 10):
+                for a4 in np.arange(0, 2, 0.2):
+                    for q1 in np.arange(q1_start, q1_start+1, 0.1):
+                        for q2 in np.arange(-1.1, 1, 0.2):
+                            for q3 in np.arange(1, 5, 0.2):
+                                coeff = {
+                                    "u1": 72.61,
+                                    "u2": 0.32,
+                                    "t1": 30.98,
+                                    "t2": 1.29,
+                                    "t3": 64.65,
+                                    "q1": q1,
+                                    "q2": q2,
+                                    "q3": q3,
+                                    "mode0": {
+                                        "a1": a1,
+                                        "a2": a2,
+                                        "a3": a3,
+                                        "a4": a4,
+                                    },
+                                    "mode1": {
+                                        "a1": 5.00011566,
+                                        "a2": -1.19630824,
+                                        "a3": 41.3585049,
+                                        "a4": 0,
+                                        "c0": -0.91562479,
+                                        "c1": 0,
+                                        "c2": -3.28579526,
+                                        "c3": 20.4098663,
+                                    },
+                                    "htv_1": -0.60293,
+                                    "htv_2": 2.12382,
+                                    "htv_3": -0.36936,
+                                    "htv_4": 0.03409,
+                                }
+                                
+                                coeff['mode0']['a1'] = a1
+                                coeff['mode0']['a2'] = a2
+                                coeff['mode0']['a3'] = a3
+                                coeff['mode0']['a4'] = a4
 
-                            coeffs_array.append(coeff)
+                                coeffs_array.append(coeff)
+    return coeffs_array
 
 
 def get_rmse_by_coeffs(coeff):
+    global min_rmse
     qoe_p1203_dict = calculate_p1203(coeff)
     p1203_df = pd.DataFrame.from_dict(qoe_p1203_dict)
 
     p1203_df = p1203_df.loc[p1203_df['video'].isin(['longdress', 'loot'])]
     grouped_p1203_qoe = p1203_df.groupby(['video', 'start_quality', 'end_quality']).mean()
 
-    return coeff, calculate_rmse(grouped_p1203_qoe, ground_truth_qoe_grouped_df)
+    rmse = calculate_rmse(grouped_p1203_qoe, ground_truth_qoe_grouped_df)
+    if rmse < min_rmse:
+        min_rmse = rmse
+        print('Min RMSE for pid {}: {}.\t Coeffs: {} {} {} {}'.format(os.getpid(), rmse, coeff['q1'], coeff['q2'], coeff['q3'], coeff['mode0']))
+
+        return coeff, rmse
+    else:
+        return 0, 5
 
 
 if __name__ == '__main__':
+        
+    q1_start = 3
     all_rmse = None
     current_time = int(time.time())
-    with Pool(10) as pool:
+
+    coeffs_array = get_coeffs(q1_start=q1_start)
+
+    with Pool(20) as pool:
         all_rmse = pool.map(get_rmse_by_coeffs, coeffs_array)
 
     all_rmse.sort(key= lambda x: x[1])
 
     # write all_rmse to files
-    with open('all_rmse_{}.txt'.format(current_time), 'w') as fp:
+    with open('all_rmse_dynamic_resolution_{}_{}.txt'.format(q1_start, current_time), 'w') as fp:
         for item in all_rmse:
             fp.write('%s\n' % str(item))
 
@@ -243,7 +259,7 @@ if __name__ == '__main__':
     print(all_rmse[0])
 
     # save the best result
-    with open('./optimized_p1203_coeff_mode0_{}.csv'.format(current_time), 'w') as f:
+    with open('./optimized_p1203_coeff_mode0_dynamic_resolution_{}_{}.csv'.format(q1_start, current_time), 'w') as f:
         f.write('====== Coeffs ====\n' + str(all_rmse[0][0]))
         f.write('\n====== RMSE ====\n' + str(all_rmse[0][1]))
 
